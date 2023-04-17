@@ -23,7 +23,7 @@ int main() {
             write(fd, cmd, strlen(cmd)+1);
             sleep(1);
             close(fd);
-            unlink("../../ipc/hmiInputToEcuPipe.txt");
+            unlink("../../ipc/hmiInputToEcuPipe");
             exit(EXIT_SUCCESS);
         } else {
             printf("Command not found. Please try again\n");

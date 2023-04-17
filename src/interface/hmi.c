@@ -11,13 +11,12 @@
 
 int readFromPipe(int fd) {
     char str[32];
-    printf("HMI is reading pipe...\n");
     if(readline(fd, str) == 0) {
         printf("%s\n", str);
-        return 0;
     }
     if(strcmp(str, "ARRESTO") == 0)
         return -1;
+    return 0;
 }
 
 int main() {

@@ -13,6 +13,16 @@ void communicate(int fd, FILE *log, char *msg) {
     writeMessage(log, msg);
 }
 
+int sendMessageToHMI(int hmiInputFd, int hmiFd, FILE *log) {
+    char str[32];
+    if(readline(hmiInputFd, str) == 0) {
+        communicate(hmiFd, log, str);
+        if(strcmp(str, "ARRESTO") == 0)
+            return -1;
+        return 0;
+    }
+}
+
 int main() {
     FILE *log;
     int hmiFd, hmiInputFd;
@@ -24,11 +34,9 @@ int main() {
     communicate(hmiFd, log, "ECU initialized");
 
     while (1) {
-        printf("ECU reading from pipe...\n");
-        if(readline(hmiInputFd, msg) == 0)
-            communicate(hmiFd, log, msg);
-        if(strcmp(msg, "ARRESTO") == 0)
+        if(sendMessageToHMI(hmiInputFd, hmiFd, log) < 0)
             break;
+        sleep(1);
     }
 
     //end program

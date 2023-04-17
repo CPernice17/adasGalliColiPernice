@@ -38,7 +38,6 @@ void writeMessage(FILE *fp, const char * format, ...){
 }
 
 int createPipe(char *pipeName) {
-    printf("Pipe name: %s\n", pipeName);
     int fd;
     unlink(pipeName);
     if(mknod(pipeName, __S_IFIFO, 0) < 0 ) {    //Creating named pipe
@@ -46,7 +45,6 @@ int createPipe(char *pipeName) {
     }
     chmod(pipeName, 0660);
     do {
-        printf("Opening pipe\n");
         fd = open(pipeName, O_WRONLY);    //Opening named pipe for write
         if(fd == -1){
             printf("Named pipe not found. Trying again...\n");
