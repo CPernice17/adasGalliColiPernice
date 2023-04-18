@@ -68,7 +68,6 @@ int openPipeOnRead(char *pipeName) {
 
 int readline (int fd, char *str) {
     int n;
-    printf("Reading...\n");
     do {
         if(read (fd, str, 1) < 0) {
             printf("Read error\n");

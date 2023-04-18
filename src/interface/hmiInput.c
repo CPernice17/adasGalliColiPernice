@@ -5,7 +5,7 @@
 
 #include "../header/commonFunctions.h"
 
-int main() {
+int main(int argc, char *argv[]) {
     char cmd[32];
     int fd;
     printf("HMI Input system initialized\n\n");

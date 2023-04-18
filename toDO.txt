@@ -1,1 +1,1 @@
-1. Risolvere bug pipe
+1. Implementare comunicazione socket tra ECU e sensori

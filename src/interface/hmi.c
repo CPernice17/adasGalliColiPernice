@@ -12,14 +12,14 @@
 int readFromPipe(int fd) {
     char str[32];
     if(readline(fd, str) == 0) {
+        if(strcmp(str, "ARRESTO") == 0)
+            return -1;
         printf("%s\n", str);
     }
-    if(strcmp(str, "ARRESTO") == 0)
-        return -1;
     return 0;
 }
 
-int main() {
+int main(int argc, char *argv[]) {
     int pidInput, pidECU;
     if((pidInput = fork()) < 0) {
         exit(EXIT_FAILURE);
@@ -34,6 +34,7 @@ int main() {
         printf("Executing centralECU\n");
         execl("../control/centralECU", 0);
     }
+
     printf("HMI Output system initialized\n\n");
     int fd;
     int n;
@@ -47,7 +48,6 @@ int main() {
     for(int i = 0; i < 2; i++) {
         wait(NULL);
     }
-    printf("HMI Input terminated successfully\n");
     close(fd);
     exit(EXIT_SUCCESS);
 }
