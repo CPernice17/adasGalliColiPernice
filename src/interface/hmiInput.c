@@ -3,7 +3,7 @@
 #include <unistd.h>
 #include <string.h>
 
-#include "../header/commonFunctions.h"
+#include "../../src/header/commonFunctions.h"
 
 int main(int argc, char *argv[]) {
     char cmd[32];

@@ -9,12 +9,8 @@
 
 int main(int argc, char *argv[]) {
     FILE *log;
-    createLog("../../logs/sensors/camera", &log);
-    
-    int ecuFd, ecuLen;
-    struct sockaddr_un registerUNIXAddress;
-    struct sockaddr *registerSockAddrPtr = (struct sockaddr*) &registerUNIXAddress;
-
+    createLog("../../logs/sensors/cameras", &log);
+    writeMessage(log, "SENSOR LAUNCHED");
     fclose(log);
     exit(EXIT_SUCCESS);
 }

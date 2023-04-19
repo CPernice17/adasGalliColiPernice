@@ -1,1 +1,2 @@
 1. Implementare comunicazione socket tra ECU e sensori
+2. Implementare comunicazione pipe tra ECU e attuatori

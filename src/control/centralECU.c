@@ -9,7 +9,8 @@
 #include <sys/socket.h>
 #include <sys/un.h> /* For AFUNIX sockets */
 
-#include "../header/commonFunctions.h"
+#include "../../src/header/commonFunctions.h"
+#include "../../src/header/socketFunctions.h"
 
 #define DEFAULT_PROTOCOL 0
 #define READ 0
@@ -61,6 +62,7 @@ int main(int argc, char *argv[]) {
             exit(EXIT_FAILURE);
         } else if(pid[i] == 0) {
             printf("Executing %s\n", components[i]);
+            execl(components[i], 0);
             exit(EXIT_SUCCESS);
         }
     }
@@ -101,11 +103,17 @@ int main(int argc, char *argv[]) {
     close(anonFd[WRITE]);
     while(1) {
         read(anonFd[READ], &input, sizeof(int));
-        printf("Reading...\n");
-        sleep(1);
-        printf("Value: %d\n", input);
         if(input == 1) 
             break;
+//        clientFd = accept(ecuFd, clientSockAddrPtr, &clientLen);
+        if(fork() == 0){ /*Create child to handle requests*/
+//            char str[32];
+//            receiveString(clientFd, str);
+//            printf("%s\n", str);
+            exit(EXIT_SUCCESS);
+        }else{
+//            close(clientFd);
+        }
     }
 
     close(anonFd[READ]);

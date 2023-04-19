@@ -7,7 +7,7 @@
 #include <unistd.h> 
 #include <string.h>
 
-#include "../header/commonFunctions.h"
+#include "../../src/header/commonFunctions.h"
 
 int readFromPipe(int fd) {
     char str[32];

@@ -1,12 +1,12 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <time.h>
-#include <unistd.h>
 #include <stdarg.h>
 #include <string.h>
-#include <stdlib.h>
-#include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <unistd.h>
+#include <sys/types.h>
 
 void createLog(char *name, FILE **log) {
     char *fileName = (char*) malloc((strlen(name)+5)*sizeof(char));
