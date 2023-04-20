@@ -9,8 +9,6 @@
 
 #include "../../src/header/commonFunctions.h"
 
-#define UBUNTU 1
-
 int readFromPipe(int fd) {
     char str[32];
     if(readline(fd, str) == 0) {
@@ -27,11 +25,7 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     } else if(pidInput == 0) {
         printf("Executing HMIInput\n");
-        #if UBUNTU
-        execlp("/bin/gnome-terminal", "gnome-terminal", "-e", "./hmiInput", 0);
-        #else
         execlp("/bin/konsole", "konsole", "-e", "./hmiInput", 0);
-        #endif
     } 
     if((pidECU = fork()) < 0) {
         exit(EXIT_FAILURE);

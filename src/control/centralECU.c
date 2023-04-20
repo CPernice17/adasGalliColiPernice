@@ -6,6 +6,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <sys/socket.h>
 #include <sys/un.h> /* For AFUNIX sockets */
 
@@ -34,6 +35,12 @@ int getInput(int hmiInputFd, int hmiFd, FILE *log) {
     }
 }
 
+void killProcesses(int pids[7]) {
+    for(int i = 0; i < 7; i++) {
+        kill(pids[i], SIGTERM);
+    }
+}
+
 int main(int argc, char *argv[]) {
     FILE *log;
     int hmiFd, hmiInputFd;
@@ -41,12 +48,18 @@ int main(int argc, char *argv[]) {
     char *msg;
     createLog("../../logs/centralECU/ecu", &log);
 
+    int inputReader;    // Input reader PID
+    int input = 0;  // Input from HMIInput
+
     int ecuFd, clientFd, ecuLen, clientLen;
 
     struct sockaddr_un ecuUNIXAddress; /*Server address */
     struct sockaddr *ecuSockAddrPtr;   /*Ptr to server address*/
     struct sockaddr_un clientUNIXAddress; /*Client address */
     struct sockaddr *clientSockAddrPtr;   /*Ptr to client address*/
+
+    int isListening[3] = {0,0,0};
+    int sensor;  // Indicates which sensor wants to send data
 
     hmiFd = createPipe("../../ipc/ecuToHmiPipe");
     hmiInputFd = openPipeOnRead("../../ipc/hmiInputToEcuPipe");
@@ -79,12 +92,9 @@ int main(int argc, char *argv[]) {
     unlink("../../ipc/ecuSocket");
 
     bind(ecuFd, ecuSockAddrPtr, ecuLen);
-    listen(ecuFd, 4);
+    listen(ecuFd, 3);
 
     pipe2(anonFd, O_NONBLOCK);
-
-    int inputReader;
-    int input;
 
     if((inputReader = fork()) < 0) {
         exit(EXIT_FAILURE);
@@ -103,19 +113,33 @@ int main(int argc, char *argv[]) {
     close(anonFd[WRITE]);
     while(1) {
         read(anonFd[READ], &input, sizeof(int));
-        if(input == 1) 
+        if(input == 1)
             break;
-//        clientFd = accept(ecuFd, clientSockAddrPtr, &clientLen);
-        if(fork() == 0){ /*Create child to handle requests*/
-//            char str[32];
-//            receiveString(clientFd, str);
-//            printf("%s\n", str);
-            exit(EXIT_SUCCESS);
-        }else{
-//            close(clientFd);
+        else if(input == 2) {
+            isListening[0] = 1;
+            isListening[1] = 1;
+            isListening[2] = 0;
         }
+        else if(input == 3){
+            isListening[0] = 0;
+            isListening[1] = 0;
+            isListening[2] = 1;
+        }
+        printf("Input: %d\n", input);
+        clientFd = accept(ecuFd, clientSockAddrPtr, &clientLen);
+        if(fork() == 0){ /*Create child to handle requests*/
+            while(recv(clientFd, &sensor, sizeof(int), 0) < 0);
+            while(send(clientFd, &isListening[sensor], sizeof(int), 0) < 0);
+            if(isListening[sensor] == 0)
+                exit(EXIT_SUCCESS);
+            char str[16];
+            printf("%s\n", str);
+            exit(EXIT_SUCCESS);
+        }
+        close(clientFd);
     }
 
+    killProcesses(pid);
     close(anonFd[READ]);
     fclose(log);
     close(hmiInputFd);
