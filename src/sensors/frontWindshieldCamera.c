@@ -39,7 +39,7 @@ int main(int argc, char *argv[]) {
         socketAuth(&ecuFd, &ecuUNIXAddress, &ecuLen, "../../ipc/ecuSocket");
         connectServer(ecuFd, ecuSockAddrPtr, ecuLen);
 
-        memset(str, 0, 16);
+        memset(str, '\0', 16);
         i = 0;
         while(read(fd, &str[i], 1) < 0);
         while(str[i] != '\n' && str[i] != EOF) {
@@ -50,7 +50,7 @@ int main(int argc, char *argv[]) {
         while(send(ecuFd, &sensorID, sizeof(sensorID), 0) < 0);
         while(recv(ecuFd, &isListening, sizeof(isListening), 0) < 0);
         if(isListening == 1) {
-            send(ecuFd, str, i, 0);
+            send(ecuFd, str, strlen(str)+1, 0);
             writeMessage(sensorLog, "%s", str);
         }
         sleep(1);
