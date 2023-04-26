@@ -41,7 +41,6 @@ int createPipe(char *pipeName) {
     int fd;
     unlink(pipeName);
     if(mknod(pipeName, __S_IFIFO, 0) < 0 ) {    //Creating named pipe
-        printf("ERROR MAKING PIPE\n");
         exit(EXIT_FAILURE);
     }
     chmod(pipeName, 0660);
@@ -71,7 +70,6 @@ int readline (int fd, char *str) {
     int n;
     do {
         if(read (fd, str, 1) < 0) {
-            printf("Read error\n");
             return -1;
         }
     } while(*str++ != '\0');

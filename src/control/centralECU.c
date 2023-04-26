@@ -48,13 +48,15 @@ void killProcesses(int pids[7]) {
 
 int main(int argc, char *argv[]) {
     FILE *log;
-    int hmiFd, hmiInputFd;
+    int hmiFd, hmiInputFd, throttleFd, steerFd, brakeFd;
     int anonFd[2];
     char *msg;
     createLog("../../logs/centralECU/ecu", &log);
+    char socketStr[16];
 
     int speed = 0;
 
+    int inputFlag;
     int inputReader;    // Input reader PID
     int input = 0;  // Input from HMIInput
 
@@ -83,7 +85,6 @@ int main(int argc, char *argv[]) {
         } else if(pid[i] == 0) {
             printf("Executing %s\n", components[i]);
             execl(components[i], 0);
-            exit(EXIT_SUCCESS);
         }
     }
 
@@ -110,61 +111,90 @@ int main(int argc, char *argv[]) {
         while (1) {
             input = getInput(hmiInputFd, hmiFd, log);
             write(anonFd[WRITE], &input, sizeof(int));
-            if(input == 1) {
-                write(hmiFd, "ARRESTO", strlen("ARRESTO")+1);
+            if(input == 3) {
+                write(hmiFd, "PARCHEGGIO", strlen("PARCHEGGIO")+1);
                 close(anonFd[WRITE]);
                 exit(EXIT_SUCCESS);
             }
         }
     }
+
+    throttleFd = createPipe("../../ipc/throttlePipe");
+    steerFd = createPipe("../../ipc/steerPipe");
+    brakeFd = createPipe("../../ipc/brakePipe");
+
     close(anonFd[WRITE]);
+    
     while(1) {
         read(anonFd[READ], &input, sizeof(int));
         //LA PROSSIMA RIGA SERVE SOLO PER TESTARE - DA CANCELLARE ALLA CONSEGNA
         writeMessageToPipe(hmiFd, "Input: %d", input);
-        if(input == 1)
-            break;
+        if(input == 1) {
+            kill(pid[2], SIGTSTP);
+            speed = 0;
+            isListening[0] = 0;
+            isListening[1] = 0;
+            isListening[2] = 0;
+        }
         else if(input == 2) {
+            kill(pid[2], SIGCONT);
             isListening[0] = 1;
             isListening[1] = 1;
             isListening[2] = 0;
         }
         else if(input == 3){
+            kill(pid[2], SIGCONT);
             isListening[0] = 0;
             isListening[1] = 0;
             isListening[2] = 1;
+            break;
         }
+        writeMessageToPipe(hmiFd, "Accepting client fd");
         clientFd = accept(ecuFd, clientSockAddrPtr, &clientLen);
-        while(recv(clientFd, &sensor, sizeof(int), 0) < 0);
+        while(recv(clientFd, &sensor, sizeof(int), 0) < 0)
+            writeMessageToPipe(hmiFd, "Loading...");
         while(send(clientFd, &isListening[sensor], sizeof(int), 0) < 0);
         if(isListening[sensor] != 0) {
-            char str[16];
-            printf("Receiving String...\n");
-            receiveString(clientFd, str);
-            printf("String received\n");
-            if(isNumber(str) == 1) {    //If ECU has received a number...
-                int requestedSpeed = atoi(str);
+            memset(socketStr, '\0', 16);
+            receiveString(clientFd, socketStr);
+            if(isNumber(socketStr) == 1) {    //If ECU has received a number...
+                int requestedSpeed = atoi(socketStr);
                 if(requestedSpeed > speed){ //Throttle
                     while(requestedSpeed > speed){
                         read(anonFd[READ], &input, sizeof(int));
-                        if (input != 2) //If Input from HMI has changed stop accelerating
+                        if(input == 1) {
                             break;
-                        writeMessageToPipe(hmiFd, "Accelerating");
-                        writeMessage(log, "Accelerating");
+                        }
+                        writeMessageToPipe(throttleFd, "INCREMENTO 5");
                         speed += 5;
                         sleep(1);
                     }
                 } else if(requestedSpeed < speed){  //Brake
                     while(requestedSpeed < speed){
                         read(anonFd[READ], &input, sizeof(int));
-                        if (input != 2) //If Input from HMI has changed stop braking
+                        if(input == 1) {
                             break;
-                        writeMessageToPipe(hmiFd, "Braking");    //Writing message down pipe
-                        writeMessage(log, "Braking");
+                        }
+                        writeMessageToPipe(brakeFd, "FRENO 5");
                         speed -= 5;
                         sleep(1);
                     }
                 }
+            }
+            else if(strcmp(socketStr, "PERICOLO") == 0) {
+                kill(pid[2], SIGTSTP);
+                speed = 0;
+            }
+            else if(strcmp(socketStr, "SINISTRA") * strcmp(socketStr, "DESTRA") == 0) {
+                writeMessageToPipe(steerFd, "%s", socketStr);
+            }
+            else if(strcmp(socketStr, "PARCHEGGIO") == 0) {
+                //GESTIONE PARCHEGGIO
+                writeMessageToPipe(hmiFd, "PARCHEGGIO");
+                isListening[0] = 0;
+                isListening[1] = 0;
+                isListening[2] = 1;
+                break;
             }
         }
     }
@@ -175,6 +205,9 @@ int main(int argc, char *argv[]) {
     close(hmiInputFd);
     close(hmiFd);
     unlink("../../ipc/ecuSocket");
+    unlink("../../ipc/throttlePipe");
+    unlink("../../ipc/steerPipe");
+    unlink("../../ipc/brakePipe");
     unlink("../../ipc/ecuToHmiPipe");
     exit(EXIT_SUCCESS);
 }
