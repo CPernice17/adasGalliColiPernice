@@ -4,9 +4,11 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <ctype.h>
 #include <sys/socket.h>
 #include <sys/un.h> /* For AFUNIX sockets */
 
@@ -16,11 +18,6 @@
 #define DEFAULT_PROTOCOL 0
 #define READ 0
 #define WRITE 1
-
-void communicate(int fd, FILE *log, char *msg) {
-    write(fd, msg, strlen(msg)+1);    //Writing message down pipe
-    writeMessage(log, msg);
-}
 
 int getInput(int hmiInputFd, int hmiFd, FILE *log) {
     char str[32];
@@ -35,6 +32,14 @@ int getInput(int hmiInputFd, int hmiFd, FILE *log) {
     }
 }
 
+int isNumber(char *str) {
+    for(int i = 0; str[i] != '\0'; i++) {
+        if(!isdigit(str[i]))
+            return 0;
+    }
+    return 1;
+}
+
 void killProcesses(int pids[7]) {
     for(int i = 0; i < 7; i++) {
         kill(pids[i], SIGTERM);
@@ -47,6 +52,8 @@ int main(int argc, char *argv[]) {
     int anonFd[2];
     char *msg;
     createLog("../../logs/centralECU/ecu", &log);
+
+    int speed = 0;
 
     int inputReader;    // Input reader PID
     int input = 0;  // Input from HMIInput
@@ -113,6 +120,8 @@ int main(int argc, char *argv[]) {
     close(anonFd[WRITE]);
     while(1) {
         read(anonFd[READ], &input, sizeof(int));
+        //LA PROSSIMA RIGA SERVE SOLO PER TESTARE - DA CANCELLARE ALLA CONSEGNA
+        writeMessageToPipe(hmiFd, "Input: %d", input);
         if(input == 1)
             break;
         else if(input == 2) {
@@ -125,18 +134,39 @@ int main(int argc, char *argv[]) {
             isListening[1] = 0;
             isListening[2] = 1;
         }
-        printf("Input: %d\n", input);
         clientFd = accept(ecuFd, clientSockAddrPtr, &clientLen);
-        if(fork() == 0){ /*Create child to handle requests*/
-            while(recv(clientFd, &sensor, sizeof(int), 0) < 0);
-            while(send(clientFd, &isListening[sensor], sizeof(int), 0) < 0);
-            if(isListening[sensor] == 0)
-                exit(EXIT_SUCCESS);
+        while(recv(clientFd, &sensor, sizeof(int), 0) < 0);
+        while(send(clientFd, &isListening[sensor], sizeof(int), 0) < 0);
+        if(isListening[sensor] != 0) {
             char str[16];
-            printf("%s\n", str);
-            exit(EXIT_SUCCESS);
+            printf("Receiving String...\n");
+            receiveString(clientFd, str);
+            printf("String received\n");
+            if(isNumber(str) == 1) {    //If ECU has received a number...
+                int requestedSpeed = atoi(str);
+                if(requestedSpeed > speed){ //Throttle
+                    while(requestedSpeed > speed){
+                        read(anonFd[READ], &input, sizeof(int));
+                        if (input != 2) //If Input from HMI has changed stop accelerating
+                            break;
+                        writeMessageToPipe(hmiFd, "Accelerating");
+                        writeMessage(log, "Accelerating");
+                        speed += 5;
+                        sleep(1);
+                    }
+                } else if(requestedSpeed < speed){  //Brake
+                    while(requestedSpeed < speed){
+                        read(anonFd[READ], &input, sizeof(int));
+                        if (input != 2) //If Input from HMI has changed stop braking
+                            break;
+                        writeMessageToPipe(hmiFd, "Braking");    //Writing message down pipe
+                        writeMessage(log, "Braking");
+                        speed -= 5;
+                        sleep(1);
+                    }
+                }
+            }
         }
-        close(clientFd);
     }
 
     killProcesses(pid);
