@@ -9,3 +9,5 @@ int createPipe(char *pipeName);
 int openPipeOnRead(char *pipeName);
 
 int readline (int fd, char *str);
+
+void writeMessageToPipe(int pipeFd, const char * format, ...);

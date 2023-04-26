@@ -25,4 +25,5 @@ void receiveString(int fd, char *str) {
         while(recv(fd, str, 1, 0) < 0)
             sleep(1);
     } while(*str++ != '\0');
+    printf("%s\n", str);
 }

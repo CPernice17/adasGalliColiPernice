@@ -41,13 +41,14 @@ int createPipe(char *pipeName) {
     int fd;
     unlink(pipeName);
     if(mknod(pipeName, __S_IFIFO, 0) < 0 ) {    //Creating named pipe
+        printf("ERROR MAKING PIPE\n");
         exit(EXIT_FAILURE);
     }
     chmod(pipeName, 0660);
     do {
         fd = open(pipeName, O_WRONLY);    //Opening named pipe for write
         if(fd == -1){
-            printf("Named pipe not found. Trying again...\n");
+            printf("%s not found. Trying again...\n", pipeName);
             sleep(1);
         }
     } while(fd == -1);
@@ -59,7 +60,7 @@ int openPipeOnRead(char *pipeName) {
     do {
         fd = open(pipeName, O_RDONLY);    //Opening named pipe for write
         if(fd == -1){
-            printf("Named pipe not found. Trying again...\n");
+            printf("%s not found. Trying again...\n", pipeName);
             sleep(1);
         }
     } while(fd == -1);
@@ -75,4 +76,13 @@ int readline (int fd, char *str) {
         }
     } while(*str++ != '\0');
     return 0;
+}
+
+void writeMessageToPipe(int pipeFd, const char * format, ...){
+    char buffer[256];
+    va_list args;
+    va_start(args, format);
+    vsnprintf(buffer, 256, format, args);
+    va_end(args);
+    write(pipeFd, buffer, strlen(buffer)+1);
 }
