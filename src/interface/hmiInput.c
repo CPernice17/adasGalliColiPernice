@@ -18,13 +18,13 @@ int main(int argc, char *argv[]) {
         } else if(strcmp(cmd, "PARCHEGGIO") == 0) {
             printf("Parking\n");
             write(fd, cmd, strlen(cmd)+1);
-        } else if(strcmp(cmd, "ARRESTO") == 0) {
-            printf("Shutting down the system\n");
-            write(fd, cmd, strlen(cmd)+1);
             sleep(1);
             close(fd);
             unlink("../../ipc/hmiInputToEcuPipe");
             exit(EXIT_SUCCESS);
+        } else if(strcmp(cmd, "ARRESTO") == 0) {
+            printf("Stopping...\n");
+            write(fd, cmd, strlen(cmd)+1);
         } else {
             printf("Command not found. Please try again\n");
         }
