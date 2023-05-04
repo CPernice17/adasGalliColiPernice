@@ -19,34 +19,82 @@
 #define READ 0
 #define WRITE 1
 
-int getInput(int hmiInputFd, int hmiFd, FILE *log) {
+int speed = 0;
+
+int pidWithArgs[2]; //THROTTLE CONTROL, PARK ASSIST
+int pidWithoutArgs[3];  //STEER BY WIRE, BRAKE BY WIRE, FRONT WINDHSIELD CAMERA
+int inputPid;
+
+int getInput(int hmiInputFd, int hmiFd, FILE *log)
+{ // GET INPUT FROM HMI INPUT
     char str[32];
-    if(readline(hmiInputFd, str) == 0) {
-        if(strcmp(str, "ARRESTO") == 0)
+    if (readline(hmiInputFd, str) == 0)
+    {
+        if (strcmp(str, "ARRESTO") == 0)
             return 1;
-        else if(strcmp(str, "INIZIO") == 0)
+        else if (strcmp(str, "INIZIO") == 0)
             return 2;
-        else if(strcmp(str, "PARCHEGGIO") == 0)
+        else if (strcmp(str, "PARCHEGGIO") == 0)
             return 3;
         return -1;
     }
 }
 
-int isNumber(char *str) {
-    for(int i = 0; str[i] != '\0'; i++) {
-        if(!isdigit(str[i]))
+int isNumber(char *str)
+{ // CHECKING IF STRING IS A NUMBER
+    for (int i = 0; str[i] != '\0'; i++)
+    {
+        if (!isdigit(str[i]))
             return 0;
     }
     return 1;
 }
 
-void killProcesses(int pids[7]) {
-    for(int i = 0; i < 7; i++) {
-        kill(pids[i], SIGTERM);
+int park(int clientFd)
+{ // PARKING METHOD
+    char str[8];
+    int result = 1;
+    for (int count = 0; count < 120; count++)
+    {
+        receiveString(clientFd, str);
+        result *= strcmp(str, "0x172a");
+        result *= strcmp(str, "0xd693");
+        result *= strcmp(str, "0x0000");
+        result *= strcmp(str, "0xbdd8");
+        result *= strcmp(str, "0xfaee");
+        result *= strcmp(str, "0x4300");
+        if (result != 0)
+            result = 1;
     }
+    return result;
 }
 
-int main(int argc, char *argv[]) {
+void endProgram(int __sig) {    //ENDING PROGRAM WITH DESIRED SIGNAL
+    kill(pidWithoutArgs[1], SIGTSTP);
+    for (int i = 0; i < 2; i++)
+    {
+        kill(pidWithArgs[i], __sig);
+    }
+    for (int i = 0; i < 3; i++)
+    {
+        kill(pidWithoutArgs[i], __sig);
+    }
+    kill(inputPid, SIGINT);
+    unlink("../../ipc/ecuSocket");
+    unlink("../../ipc/throttlePipe");
+    unlink("../../ipc/steerPipe");
+    unlink("../../ipc/brakePipe");
+    unlink("../../ipc/ecuToHmiPipe");
+}
+
+void throttleFailure() {    //HANDLING THROTTLE FAILURE
+    speed = 0;
+    endProgram(SIGUSR1);
+    exit(EXIT_FAILURE);
+}
+
+int main(int argc, char *argv[])
+{
     FILE *log;
     int hmiFd, hmiInputFd, throttleFd, steerFd, brakeFd;
     int anonFd[2];
@@ -54,47 +102,65 @@ int main(int argc, char *argv[]) {
     createLog("../../logs/centralECU/ecu", &log);
     char socketStr[16];
 
-    int speed = 0;
-
-    int inputFlag;
-    int inputReader;    // Input reader PID
-    int input = 0;  // Input from HMIInput
+    int inputReader; // Input reader PID
+    int input = 0;   // Input from HMIInput
+    int hasRead;
 
     int ecuFd, clientFd, ecuLen, clientLen;
 
-    struct sockaddr_un ecuUNIXAddress; /*Server address */
-    struct sockaddr *ecuSockAddrPtr;   /*Ptr to server address*/
+    struct sockaddr_un ecuUNIXAddress;    /*Server address */
+    struct sockaddr *ecuSockAddrPtr;      /*Ptr to server address*/
     struct sockaddr_un clientUNIXAddress; /*Client address */
     struct sockaddr *clientSockAddrPtr;   /*Ptr to client address*/
 
-    int isListening[3] = {0,0,0};
-    int sensor;  // Indicates which sensor wants to send data
+    int isListening[3] = {0, 0, 0};
+    int sensor; // Indicates which sensor wants to send data
 
     hmiFd = createPipe("../../ipc/ecuToHmiPipe");
     hmiInputFd = openPipeOnRead("../../ipc/hmiInputToEcuPipe");
+    read(hmiInputFd, &inputPid, sizeof(int));
 
-    int pid[7];
-    char *components[] = {"../actuators/steerByWire","../actuators/throttleControl"
-        ,"../actuators/brakeByWire","../sensors/frontWindshieldCamera"
-        ,"../sensors/forwardFacingRadar","../sensors/parkAssist"
-        ,"../sensors/surroundViewCameras"};
+    char *componentsWithArgs[] = {"../actuators/throttleControl", "./throttleControl"
+        , "../sensors/forwardFacingRadar", "./forwardFacingRadar"};
+    char *componentsWithoutArgs[] = {"../actuators/steerByWire", "./steerByWire"
+        , "../actuators/brakeByWire", "/brakeByWire", "../sensors/frontWindshieldCamera"
+        , "./frontWindshieldCamera"};
 
-    for(int i = 0; i < 7; i++) {
-        if((pid[i] = fork()) < 0) {
+    signal(SIGUSR1, throttleFailure);   //THROTTLE FAILURE HANDLING FUNCTION
+
+    remove("../../logs/sensors/assist.log");    //REMOVING ASSIST LOG IF EXISTS
+    
+    for (int i = 0; i < 1; i++)
+    {
+        if ((pidWithArgs[i] = fork()) < 0)
+        {
             exit(EXIT_FAILURE);
-        } else if(pid[i] == 0) {
-            printf("Executing %s\n", components[i]);
-            execl(components[i], 0);
+        }
+        else if (pidWithArgs[i] == 0)
+        {
+            execl(componentsWithArgs[2*i], componentsWithArgs[2*i+1], argv[1]);
         }
     }
 
-    ecuSockAddrPtr = (struct sockaddr *) &ecuUNIXAddress;
+    for (int i = 0; i < 3; i++)
+    {
+        if ((pidWithoutArgs[i] = fork()) < 0)
+        {
+            exit(EXIT_FAILURE);
+        }
+        else if (pidWithoutArgs[i] == 0)
+        {
+            execl(componentsWithoutArgs[2*i], componentsWithoutArgs[2*i+1], 0);
+        }
+    }
+
+    ecuSockAddrPtr = (struct sockaddr *)&ecuUNIXAddress;
     ecuLen = sizeof(ecuUNIXAddress);
-    clientSockAddrPtr = (struct sockaddr *) &clientUNIXAddress;
+    clientSockAddrPtr = (struct sockaddr *)&clientUNIXAddress;
     clientLen = sizeof(clientUNIXAddress);
 
     ecuFd = socket(AF_UNIX, SOCK_STREAM, DEFAULT_PROTOCOL);
-    ecuUNIXAddress.sun_family = AF_UNIX;    /* Set domain type */
+    ecuUNIXAddress.sun_family = AF_UNIX; /* Set domain type */
 
     strcpy(ecuUNIXAddress.sun_path, "../../ipc/ecuSocket");
     unlink("../../ipc/ecuSocket");
@@ -104,15 +170,20 @@ int main(int argc, char *argv[]) {
 
     pipe2(anonFd, O_NONBLOCK);
 
-    if((inputReader = fork()) < 0) {
+    if ((inputReader = fork()) < 0)
+    {
         exit(EXIT_FAILURE);
-    } else if(inputReader == 0) {   //Reads from HMI Input terminal
+    }
+    else if (inputReader == 0)
+    { // Reads from HMI Input terminal
         close(anonFd[READ]);
-        while (1) {
+        while (1)
+        {
             input = getInput(hmiInputFd, hmiFd, log);
             write(anonFd[WRITE], &input, sizeof(int));
-            if(input == 3) {
-                write(hmiFd, "PARCHEGGIO", strlen("PARCHEGGIO")+1);
+            if (input == 3)
+            {
+                write(hmiFd, "PARCHEGGIO", strlen("PARCHEGGIO") + 1);
                 close(anonFd[WRITE]);
                 exit(EXIT_SUCCESS);
             }
@@ -124,90 +195,129 @@ int main(int argc, char *argv[]) {
     brakeFd = createPipe("../../ipc/brakePipe");
 
     close(anonFd[WRITE]);
-    
-    while(1) {
+
+    while (1)
+    {
         read(anonFd[READ], &input, sizeof(int));
-        //LA PROSSIMA RIGA SERVE SOLO PER TESTARE - DA CANCELLARE ALLA CONSEGNA
-        writeMessageToPipe(hmiFd, "Input: %d", input);
-        if(input == 1) {
-            kill(pid[2], SIGTSTP);
+        if ((input == 1 || strcmp(socketStr, "PERICOLO") == 0) && strcmp(socketStr, "PARCHEGGIO") != 0)
+        {
+            writeMessageToPipe(hmiFd, "ARRESTO AUTO");
+            kill(pidWithoutArgs[1], SIGTSTP);
             speed = 0;
             isListening[0] = 0;
             isListening[1] = 0;
             isListening[2] = 0;
         }
-        else if(input == 2) {
-            kill(pid[2], SIGCONT);
+        else if (input == 2 && strcmp(socketStr, "PARCHEGGIO") != 0)
+        {
+            kill(pidWithoutArgs[1], SIGCONT);
             isListening[0] = 1;
             isListening[1] = 1;
             isListening[2] = 0;
         }
-        else if(input == 3){
-            kill(pid[2], SIGCONT);
+        else if (input == 3 || strcmp(socketStr, "PARCHEGGIO") == 0)
+        {
+            input = 3;
+            while (speed > 0)
+            {
+                writeMessage(log, "FRENO 5");
+                writeMessageToPipe(hmiFd, "FRENO 5");
+                writeMessageToPipe(brakeFd, "FRENO 5");
+                speed -= 5;
+                sleep(1);
+            }
             isListening[0] = 0;
             isListening[1] = 0;
             isListening[2] = 1;
-            break;
+            for (int i = 0; i < 1; i++)
+            {
+                kill(pidWithArgs[i], SIGSTOP);
+            }
+            for (int i = 0; i < 3; i++)
+            {
+                kill(pidWithoutArgs[i], SIGSTOP);
+            }
+            if ((pidWithArgs[1] = fork()) == 0) //LAUNCHING PARK ASSIST
+            {
+                execl("../sensors/parkAssist", "./parkAssist", argv[1]);
+            }
         }
-        writeMessageToPipe(hmiFd, "Accepting client fd");
         clientFd = accept(ecuFd, clientSockAddrPtr, &clientLen);
-        while(recv(clientFd, &sensor, sizeof(int), 0) < 0)
-            writeMessageToPipe(hmiFd, "Loading...");
-        while(send(clientFd, &isListening[sensor], sizeof(int), 0) < 0);
-        if(isListening[sensor] != 0) {
-            memset(socketStr, '\0', 16);
+        while (recv(clientFd, &sensor, sizeof(int), 0) < 0)
+            ;
+        while (send(clientFd, &isListening[sensor], sizeof(int), 0) < 0)
+            ;
+        memset(socketStr, '\0', 16);
+        if (sensor == 0 && isListening[0] * isListening[1] == 1)
+        {
             receiveString(clientFd, socketStr);
-            if(isNumber(socketStr) == 1) {    //If ECU has received a number...
+            if (isNumber(socketStr) == 1)
+            { // If ECU has received a number...
                 int requestedSpeed = atoi(socketStr);
-                if(requestedSpeed > speed){ //Throttle
-                    while(requestedSpeed > speed){
+                if (requestedSpeed > speed)
+                { // Throttle
+                    while (requestedSpeed > speed)
+                    {
                         read(anonFd[READ], &input, sizeof(int));
-                        if(input == 1) {
+                        if (input != 2)
+                        {
                             break;
                         }
+                        writeMessage(log, "INCREMENTO 5");
+                        writeMessageToPipe(hmiFd, "INCREMENTO 5");
                         writeMessageToPipe(throttleFd, "INCREMENTO 5");
                         speed += 5;
                         sleep(1);
                     }
-                } else if(requestedSpeed < speed){  //Brake
-                    while(requestedSpeed < speed){
+                }
+                else if (requestedSpeed < speed)
+                { // Brake
+                    while (requestedSpeed < speed)
+                    {
                         read(anonFd[READ], &input, sizeof(int));
-                        if(input == 1) {
+                        if (input != 2)
+                        {
                             break;
                         }
+                        writeMessage(log, "FRENO 5");
+                        writeMessageToPipe(hmiFd, "FRENO 5");
                         writeMessageToPipe(brakeFd, "FRENO 5");
                         speed -= 5;
                         sleep(1);
                     }
                 }
             }
-            else if(strcmp(socketStr, "PERICOLO") == 0) {
-                kill(pid[2], SIGTSTP);
-                speed = 0;
-            }
-            else if(strcmp(socketStr, "SINISTRA") * strcmp(socketStr, "DESTRA") == 0) {
+            else if (strcmp(socketStr, "SINISTRA") * strcmp(socketStr, "DESTRA") == 0)
+            {
                 writeMessageToPipe(steerFd, "%s", socketStr);
+                int count = 0;
+                while(count < 4) {
+                    writeMessage(log, "STERZATA A %s", socketStr);
+                    writeMessageToPipe(hmiFd, "STERZATA A %s", socketStr);
+                    read(anonFd[READ], &input, sizeof(int));
+                    if (input != 2)
+                    {
+                        break;
+                    }
+                    count++;
+                }
             }
-            else if(strcmp(socketStr, "PARCHEGGIO") == 0) {
-                //GESTIONE PARCHEGGIO
-                writeMessageToPipe(hmiFd, "PARCHEGGIO");
-                isListening[0] = 0;
-                isListening[1] = 0;
-                isListening[2] = 1;
+        }
+        if (sensor == 2 && isListening[2] == 1)
+        {
+            if (park(clientFd) != 0)
+            {
+                close(clientFd);
                 break;
             }
         }
+        close(clientFd);
     }
 
-    killProcesses(pid);
     close(anonFd[READ]);
     fclose(log);
     close(hmiInputFd);
     close(hmiFd);
-    unlink("../../ipc/ecuSocket");
-    unlink("../../ipc/throttlePipe");
-    unlink("../../ipc/steerPipe");
-    unlink("../../ipc/brakePipe");
-    unlink("../../ipc/ecuToHmiPipe");
+    endProgram(SIGINT);
     exit(EXIT_SUCCESS);
 }

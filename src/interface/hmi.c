@@ -4,49 +4,55 @@
 #include <sys/wait.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <unistd.h> 
 #include <string.h>
 
 #include "../../src/header/commonFunctions.h"
 
+int pidECU;
+int terminated;
+int fd;
+
+void countTerminated() {
+    terminated++;
+    if (terminated >= 2) {
+        close(fd);
+        exit(EXIT_SUCCESS);
+    }
+}
+
 int readFromPipe(int fd) {
     char str[256];
-    if(readline(fd, str) == 0) {
-        if(strcmp(str, "PARCHEGGIO") == 0)
-            return -1;
-        printf("%s\n", str);
+    if(readline(fd, str) < 0) {
+        return -1;
     }
+    printf("%s\n", str);
     return 0;
 }
 
 int main(int argc, char *argv[]) {
-    int pidInput, pidECU;
-    if((pidInput = fork()) < 0) {
+    signal(SIGCHLD, countTerminated);
+    terminated = 0;
+
+    if(argc != 2 || strcmp(argv[1], "NORMALE") * strcmp(argv[1], "ARTIFICIALE") != 0) {
+        printf("Argomenti non validi. Riprovare\n");
         exit(EXIT_FAILURE);
-    } else if(pidInput == 0) {
-        printf("Executing HMIInput\n");
-        execlp("/bin/gnome-terminal", "gnome-terminal", "-e", "./hmiInput", 0);
-    } 
+    }
+
+    system("gnome-terminal -- ./hmiInput");
     if((pidECU = fork()) < 0) {
         exit(EXIT_FAILURE);
     }
     else if(pidECU == 0) {
-        printf("Executing centralECU\n");
-        execlp("../control/centralECU", 0);
+        execl("../control/centralECU", "./centralECU", argv[1], 0);
     }
 
     printf("HMI Output system initialized\n\n");
-    int fd;
     int n;
     fd = openPipeOnRead("../../ipc/ecuToHmiPipe");
     printf("Named pipe found.\n\n");
     while(1) {
-        if(readFromPipe(fd) < 0)
-            break;
+        while(readFromPipe(fd) < 0);
     }
-    for(int i = 0; i < 2; i++) {
-        wait(NULL);
-    }
-    close(fd);
-    exit(EXIT_SUCCESS);
 }

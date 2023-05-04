@@ -1,3 +1,2 @@
-1. Sensore di parcheggio
-2. Implementazione dettagli facoltativi
-3. Scrittura relazione
+1. Componenti Forward facing camera e Surround view cameras (facoltativo)
+2. idk
