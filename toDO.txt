@@ -1,2 +1,0 @@
-1. Componenti Forward facing camera e Surround view cameras (facoltativo)
-2. idk
