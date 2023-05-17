@@ -37,14 +37,11 @@ int main(int argc, char *argv[]) {
     while (1) {
         if((readVal = readline(ecuFd, steerDirection)) == -1) {
             writeMessage(steerLog, "NO ACTION");
+            sleep(1);
         }else if(strcmp(steerDirection, "SINISTRA") * strcmp(steerDirection, "DESTRA") == 0) {
-            for(int i = 0; i < 4 || strcmp(steerDirection, "PARCHEGGIO") == 0; i++) {
-                readline(ecuFd, steerDirection);
-                writeMessage(steerLog, "STO GIRANDO A %s", steerDirection);
-                sleep(1);
-            }
+            writeMessage(steerLog, "STO GIRANDO A %s", steerDirection);
+            sleep(1);
         }
-        sleep(1);
     }
 
     fclose(steerLog);

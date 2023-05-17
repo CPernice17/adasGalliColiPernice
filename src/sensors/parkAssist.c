@@ -25,7 +25,7 @@ int main(int argc, char *argv[]) {
     }
     urand = fopen(urandName, "rb");
     
-    const int sensorID = 2; // Value in order to be recognized by the socket
+    const int sensorID = 1; // Value in order to be recognized by the socket
     int isListening;    // Indicates whether ECU is listening or not
 
     int ecuFd, ecuLen;

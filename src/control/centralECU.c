@@ -89,6 +89,8 @@ void endProgram(int __sig) {    //ENDING PROGRAM WITH DESIRED SIGNAL
 
 void throttleFailure() {    //HANDLING THROTTLE FAILURE
     speed = 0;
+    kill(pidWithoutArgs[1], SIGTSTP);
+    kill(getppid(), SIGUSR1);
     endProgram(SIGUSR1);
     exit(EXIT_FAILURE);
 }
@@ -113,7 +115,7 @@ int main(int argc, char *argv[])
     struct sockaddr_un clientUNIXAddress; /*Client address */
     struct sockaddr *clientSockAddrPtr;   /*Ptr to client address*/
 
-    int isListening[3] = {0, 0, 0};
+    int isListening[2] = {0, 0};
     int sensor; // Indicates which sensor wants to send data
 
     hmiFd = createPipe("../../ipc/ecuToHmiPipe");
@@ -207,15 +209,13 @@ int main(int argc, char *argv[])
             speed = 0;
             isListening[0] = 0;
             isListening[1] = 0;
-            isListening[2] = 0;
         }
         else if (input == 2 && strcmp(socketStr, "PARCHEGGIO") != 0)
         {
             kill(pidWithoutArgs[1], SIGCONT);
             stopFlag = 0;   // Waiting for the next stop to be called
             isListening[0] = 1;
-            isListening[1] = 1;
-            isListening[2] = 0;
+            isListening[1] = 0;
         }
         else if (input == 3 || strcmp(socketStr, "PARCHEGGIO") == 0)
         {
@@ -229,8 +229,7 @@ int main(int argc, char *argv[])
                 sleep(1);
             }
             isListening[0] = 0;
-            isListening[1] = 0;
-            isListening[2] = 1;
+            isListening[1] = 1;
             for (int i = 0; i < 1; i++)
             {
                 kill(pidWithArgs[i], SIGSTOP);
@@ -250,7 +249,7 @@ int main(int argc, char *argv[])
         while (send(clientFd, &isListening[sensor], sizeof(int), 0) < 0)
             ;
         memset(socketStr, '\0', 16);
-        if (sensor == 0 && isListening[0] * isListening[1] == 1)
+        if (sensor == 0 && isListening[0] == 1)
         {
             receiveString(clientFd, socketStr);
             if (isNumber(socketStr) == 1)
@@ -291,9 +290,9 @@ int main(int argc, char *argv[])
             }
             else if (strcmp(socketStr, "SINISTRA") * strcmp(socketStr, "DESTRA") == 0)
             {
-                writeMessageToPipe(steerFd, "%s", socketStr);
                 int count = 0;
                 while(count < 4) {
+                    writeMessageToPipe(steerFd, "%s", socketStr);
                     writeMessage(log, "STERZATA A %s", socketStr);
                     writeMessageToPipe(hmiFd, "STERZATA A %s", socketStr);
                     read(anonFd[READ], &input, sizeof(int));
@@ -301,11 +300,12 @@ int main(int argc, char *argv[])
                     {
                         break;
                     }
+                    sleep(1);
                     count++;
                 }
             }
         }
-        if (sensor == 2 && isListening[2] == 1)
+        if (sensor == 1 && isListening[1] == 1)
         {
             if (park(clientFd) != 0)
             {

@@ -31,8 +31,14 @@ int readFromPipe(int fd) {
     return 0;
 }
 
+void failureHandler() {
+    printf("ERRORE ACCELERAZIONE\nTERMINAZIONE PROGRAMMA...");
+    exit(EXIT_FAILURE);
+}
+
 int main(int argc, char *argv[]) {
     signal(SIGCHLD, countTerminated);
+    signal(SIGUSR1, failureHandler);
     terminated = 0;
 
     if(argc != 2 || strcmp(argv[1], "NORMALE") * strcmp(argv[1], "ARTIFICIALE") != 0) {
